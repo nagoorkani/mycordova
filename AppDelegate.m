@@ -91,10 +91,14 @@
     NSURL *appURL = [NSURL URLWithString:@"index.html"];
     NSString* loadErr = nil;
     
-    NSString * _key = @"test123";
+//    NSString * _key = @"test123";
+    NSString * _key = [self getKey];
 
     if (!loadErr) {
-        NSString *html = [self getDecryptHtml:_key];
+        NSString *js = [self DecryptFile:@"www/cordova-1.7.0" :@"js" :_key];
+        NSString *html = [self DecryptFile:@"www/index" :@"html" :_key];
+        
+//        NSString *html = [self getDecryptHtml:_key];
         [self.webView loadHTMLString:html baseURL:appURL];
     } else {
         NSString* html = [NSString stringWithFormat:@"<html><body> %@ </body></html>", loadErr];
@@ -116,7 +120,7 @@
         return nil;
     }
     
-    char keyPtr[kCCKeySizeAES128+1]; // room for terminator (unused)
+    char keyPtr[kCCKeySizeAES256+1]; // room for terminator (unused)
     bzero(keyPtr, sizeof(keyPtr)); // fill with zeroes (for padding)
     
     // fetch key data
@@ -130,7 +134,7 @@
     
     size_t numBytesEncrypted = 0;
     
-    CCCryptorStatus result = CCCrypt(kCCDecrypt, kCCAlgorithmAES128, kCCOptionPKCS7Padding, keyPtr,kCCKeySizeAES128, NULL, [dataIn bytes], dataLength, dataOut, bufferSize, &numBytesEncrypted);    
+    CCCryptorStatus result = CCCrypt(kCCDecrypt, kCCAlgorithmAES128, kCCOptionPKCS7Padding, keyPtr,kCCKeySizeAES256, NULL, [dataIn bytes], dataLength, dataOut, bufferSize, &numBytesEncrypted);    
     
     
     NSData *output_decrypt = [NSData dataWithBytesNoCopy:dataOut length:numBytesEncrypted];    
@@ -152,9 +156,63 @@
     }
     if (html == nil) {
         html = [NSString stringWithFormat:@"<html><body>%@ file corrupted</body></html>", inputPath];
-    }
+    }	
     return [html retain];    
 //    return nil;
+    
+}
+
+
+- (NSString *) DecryptFile :(NSString *)file :(NSString *)fmt :(NSString *)key
+{
+    
+    NSString *inputPath = [[NSBundle mainBundle] pathForResource:file ofType:fmt];
+    NSData *dataIn = [NSData dataWithContentsOfFile:inputPath];
+    
+    if ( inputPath == NULL ) {
+        NSLog(@"No file found...!");
+        return nil;
+    }
+    
+    char keyPtr[kCCKeySizeAES256+1]; 
+    bzero(keyPtr, sizeof(keyPtr)); 
+    
+    [key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding];
+    
+    NSUInteger dataLength = [dataIn length];
+
+    NSLog(@"Data length: %i", dataLength);
+    
+    size_t bufferSize = dataLength + kCCBlockSizeAES128;
+    void *dataOut = malloc(bufferSize);
+    
+    size_t numBytesEncrypted = 0;
+    
+    CCCryptorStatus result = CCCrypt(kCCDecrypt, kCCAlgorithmAES128, kCCOptionPKCS7Padding, keyPtr,kCCKeySizeAES256, NULL, [dataIn bytes], dataLength, dataOut, bufferSize, &numBytesEncrypted);    
+    
+    
+    NSData *output_decrypt = [NSData dataWithBytesNoCopy:dataOut length:numBytesEncrypted];    
+    
+    NSString * html;
+    
+    NSLog(@"Encrypt bytes: %lu", numBytesEncrypted);       
+    
+    if (result == kCCSuccess && numBytesEncrypted != 0) {
+        [output_decrypt writeToFile:inputPath atomically:YES];
+        html = [[NSString alloc] initWithData:output_decrypt encoding:NSUTF8StringEncoding];
+    }
+    if (html == nil) {
+        html = [NSString stringWithFormat:@"<html><body>%@ file corrupted</body></html>", inputPath];
+    }
+    return [html retain];    
+}
+
+
+-(NSString *) getKey{
+
+    NSString *key = [NSString stringWithContentsOfFile: @"Users/z062281/Desktop/keys.txt"];
+    NSLog(@"File contents: %@", key);
+    return key;
     
 }
 
